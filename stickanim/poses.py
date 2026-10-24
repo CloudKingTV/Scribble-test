@@ -56,3 +56,13 @@ POINT_UP = P(lean=-6, head=-38, l_arm=-8, l_elbow=20, r_arm=150, r_elbow=0,
 CROSSED = P(lean=-4, head=-10, l_arm=26, l_elbow=112, r_arm=20, r_elbow=118,
             l_leg=14, l_knee=-3, r_leg=-13, r_knee=-2)
 LOOK_UP = {**STAND, "head": -35, "lean": -5}
+CHEER = P(lean=-6, head=-22, l_arm=165, l_elbow=18, r_arm=150, r_elbow=25,
+          l_leg=16, l_knee=-8, r_leg=-14, r_knee=-6)
+SQUISH = P(lean=12, head=28, l_arm=22, l_elbow=150, r_arm=14, r_elbow=150,
+           l_leg=36, l_knee=-72, r_leg=24, r_knee=-62)
+HOLD_UP = P(lean=-4, head=-26, l_arm=-16, l_elbow=40, r_arm=172, r_elbow=6,
+            l_leg=16, l_knee=-6, r_leg=-15, r_knee=-4)
+GRAB_LOW = P(lean=72, head=-32, l_arm=82, l_elbow=12, r_arm=72, r_elbow=12,
+             l_leg=42, l_knee=-64, r_leg=-14, r_knee=-30)
+PULL = P(lean=-30, head=12, l_arm=-62, l_elbow=22, r_arm=-72, r_elbow=12,
+         l_leg=36, l_knee=-30, r_leg=-26, r_knee=-10)

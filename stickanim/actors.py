@@ -48,13 +48,14 @@ SPRINGS = {"head": (4.0, 0.42), "l_arm": (5.0, 0.38), "r_arm": (5.0, 0.38),
 
 class Figure:
     def __init__(self, scene, x, floor, facing=1, size=72, color=(30, 160, 70), width=None,
-                 pose=poses.STAND, visible_from=0.0):
-        self.scene, self.fps = scene, scene.fps
+                 pose=poses.STAND, visible_from=0.0, hat=None):
+        self.scene, self.fps, self.hat = scene, scene.fps, hat
         self.size, self.color = size, color
         self.width = width or round(size * 0.14)
         self.keys, self._times, self.sims = [], [], []
         self.strokes = None
         self.visible_from = visible_from
+        self.visible_until = 1e9
         self.breathe = True
         self._springs = []      # per frame: {joint: (offset from keyed angle, velocity)}
         self._push(0.0, dict(x=x, y=0.0, facing=facing, spin=0.0, pose=dict(pose),
@@ -197,6 +198,13 @@ class Figure:
             self._springs.append(out)
         return {j: o for j, (o, _) in self._springs[k].items()}
 
+    def facing(self, t):
+        sim = self._sim_at(t)
+        if sim:
+            i = bisect.bisect_right(self._times, sim[0])
+            return self.keys[max(0, i - 1)]["facing"]
+        return self.state(t)["facing"]
+
     def point(self, t, name):
         return self.points(t)[name]
 
@@ -312,10 +320,11 @@ class Figure:
             self.scene.sfx(t1, "land", x1)
         return t1
 
-    def ragdoll(self, t0, t1, push=(0.0, 0.0), pins=(), bounds=None, ground=None, fx=True):
+    def ragdoll(self, t0, t1, push=(0.0, 0.0), pins=(), bounds=None, ground=None, fx=True, kicks=()):
         """Hand the body to physics from t0 to t1.
 
         pins: [(point, cursor, t_from, t_to, (dx, dy))] — that joint follows the cursor.
+        kicks: [(vx, vy, [points])] — extra velocity for particular joints (e.g. feet swept away).
         """
         self.truncate(t0)
         dt = 1 / self.fps
@@ -323,6 +332,8 @@ class Figure:
         bounds = bounds or self.scene.bounds
         rd = Ragdoll(P0, Pm, dt, self.size, self.width, bounds)
         rd.push(*push)
+        for vx, vy, pts in kicks:
+            rd.push(vx, vy, pts)
         k0, k1 = round(t0 * self.fps), round(t1 * self.fps)
         frames = [P0]
         for k in range(k0 + 1, k1 + 1):
@@ -411,13 +422,20 @@ def partial(pts, u):
     return out
 
 
-class Cursor:
-    """The mouse pointer: position, rotation, icon (arrow/open/grab/pencil/eraser), clicks."""
+def _num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
 
-    def __init__(self, scene, x, y, icon="arrow", scale=1.8):
-        self.scene, self.fps, self.scale = scene, scene.fps, scale
+
+class Sprite:
+    """Anything with keyed position and properties: cursors, props, HUD text.
+
+    Numeric fields (x, y, rot, scale, alpha, value...) interpolate; everything else steps.
+    """
+
+    def __init__(self, scene, x, y, **fields):
+        self.scene, self.fps = scene, scene.fps
         self.keys, self._times, self.attached = [], [], []
-        self.key(0.0, x=x, y=y, rot=0.0, icon=icon, visible=True)
+        self.key(0.0, **{"x": x, "y": y, "rot": 0.0, "visible": True, **fields})
 
     @property
     def now(self):
@@ -437,36 +455,45 @@ class Cursor:
             self.key(t, ease="linear")
         return t
 
+    def show(self, t, **fields):
+        return self.key(t, ease="linear", visible=True, **fields)
+
+    def hide(self, t):
+        return self.key(t, ease="linear", visible=False)
+
     def move(self, t1, x, y, t0=None, ease="smooth", arc=0.12, **fields):
-        """Curved mouse move to (x, y), arriving at t1."""
+        """Curved move to (x, y) arriving at t1; numeric fields given here animate along the way."""
         t0 = self.hold(self.now if t0 is None else t0)
         x0, y0 = self.pos(t0)
         dx, dy = x - x0, y - y0
         cx, cy = (x0 + x) / 2 - dy * arc, (y0 + y) / 2 + dx * arc
-        r0 = self.keys[-1]["rot"]
-        r1 = fields.pop("rot", r0)
+        start = self.keys[-1]
+        tween = {k: (start[k], v) for k, v in fields.items() if _num(v) and _num(start.get(k))}
         for k in range(math.floor(t0 * self.fps) + 1, math.ceil(t1 * self.fps)):
             tt = k / self.fps
             u = EASE[ease]((tt - t0) / (t1 - t0))
             bx = (1 - u) ** 2 * x0 + 2 * u * (1 - u) * cx + u * u * x
             by = (1 - u) ** 2 * y0 + 2 * u * (1 - u) * cy + u * u * y
-            self.key(tt, ease="linear", x=bx, y=by, rot=lerp(r0, r1, u))
-        return self.key(t1, ease="linear", x=x, y=y, rot=r1, **fields)
-
-    def click(self, t, sound=True):
-        self.hold(t)
-        x, y = self.pos(t)
-        self.scene.ring(t, x, y)
-        if sound:
-            self.scene.sfx(t, "click", x)
-        return t
+            self.key(tt, ease="linear", x=bx, y=by, **{f: lerp(a, b, u) for f, (a, b) in tween.items()})
+        return self.key(t1, ease="linear", x=x, y=y, **fields)
 
     def attach(self, t0, t1, fig, point, offset=(0.0, 0.0)):
-        """Glue the cursor to a figure's joint (e.g. the figure grabs it)."""
+        """Glue to a figure's joint from t0 to t1 (e.g. the figure grabs it). t1=None: until detach()."""
         self.hold(t0)
-        self.attached.append((t0, t1, fig, point, offset))
+        self.attached.append((t0, 1e18 if t1 is None else t1, fig, point, offset))
+        if t1 is None:
+            return t0
         x, y = fig.point(t1, point)
         return self.key(t1, ease="linear", x=x + offset[0], y=y + offset[1])
+
+    def detach(self, t):
+        """End the current attachment at t; the sprite stays where the joint was."""
+        t0, _, fig, point, off = self.attached[-1]
+        self.attached[-1] = (t0, t, fig, point, off)
+        x, y = fig.point(t, point)
+        self.keys = [k for k in self.keys if k["t"] < t]
+        self._times = [k["t"] for k in self.keys]
+        return self.key(t, ease="linear", x=x + off[0], y=y + off[1])
 
     def _interp(self, t):
         i = bisect.bisect_right(self._times, t)
@@ -487,6 +514,41 @@ class Cursor:
 
     def look(self, t):
         a, b, u = self._interp(t)
+        out = {}
+        for k, v in a.items():
+            if k in ("t", "ease"):
+                continue
+            w = b.get(k, v)
+            out[k] = lerp(v, w, u) if _num(v) and _num(w) else (v if u < 1 else w)
+        out["visible"] = a["visible"] if u < 1 else b["visible"]
+        out["x"], out["y"] = self.pos(t)
+        return out
+
+
+class Cursor(Sprite):
+    """The mouse pointer: position, rotation, icon (arrow/open/grab/pencil/eraser), clicks."""
+
+    def __init__(self, scene, x, y, icon="arrow", scale=1.8):
+        super().__init__(scene, x, y, icon=icon, scale=scale)
+
+    def click(self, t, sound=True):
+        self.hold(t)
         x, y = self.pos(t)
-        return dict(x=x, y=y, rot=lerp(a["rot"], b["rot"], u), icon=a["icon"] if u < 1 else b["icon"],
-                    visible=a["visible"], scale=self.scale)
+        self.scene.ring(t, x, y)
+        if sound:
+            self.scene.sfx(t, "click", x)
+        return t
+
+
+class Prop(Sprite):
+    """A drawable object (coin, rug, candle, banner...). kind picks the drawing in props.py.
+
+    layer: "back" (behind figures), "front" (in front of figures) or "hud" (screen space,
+    unaffected by camera pan, shake and zoom).
+    """
+
+    def __init__(self, scene, kind, x, y, layer="back", visible=True, **params):
+        self.layer = layer
+        super().__init__(scene, x, y, **{"kind": kind, "scale": 1.0, "alpha": 1.0, **params})
+        if not visible:
+            self.keys[0]["visible"] = False

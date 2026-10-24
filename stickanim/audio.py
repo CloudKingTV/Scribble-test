@@ -117,6 +117,99 @@ def land(rng):
     return _norm(thud(rng, 0.8) + 0.4 * np.pad(whoosh(rng, 0.25, 600, 3000, 0.1), (0, int(0.15 * SR))), 0.8)
 
 
+def boom(rng, power=1.0):
+    t = _t(2.2)
+    thump = _glide(90, 28, 2.2, 6) * np.exp(-t * 3.5)
+    crack = _band(rng.standard_normal(len(t)), 600, 7000) * np.exp(-t * 30)
+    roar = _band(rng.standard_normal(len(t)), 60, 1500) * np.exp(-t * 2.2)
+    crackle = _band(rng.standard_normal(len(t)), 2000, 8000) * (rng.random(len(t)) > 0.997) * np.exp(-t * 2)
+    return _norm(thump + _norm(crack, 0.8) + _norm(roar, 0.7) + _norm(crackle, 0.25), 1.0)
+
+
+def distant_boom(rng):
+    t = _t(2.5)
+    roar = _band(rng.standard_normal(len(t)), 30, 260) * np.minimum(t / 0.05, 1) * np.exp(-t * 1.6)
+    return _norm(roar + 0.6 * _glide(55, 30, 2.5, 4) * np.exp(-t * 2), 0.6)
+
+
+def gunshot(rng):
+    t = _t(0.9)
+    crack = _band(rng.standard_normal(len(t)), 1200, 9000) * np.exp(-t * 120)
+    body = _band(rng.standard_normal(len(t)), 200, 2500) * np.exp(-t * 25)
+    echo = np.zeros(len(t))
+    d = int(0.13 * SR)
+    echo[d:] = _band(rng.standard_normal(len(t) - d), 300, 2000) * np.exp(-t[: len(t) - d] * 9) * 0.35
+    return _norm(_norm(crack) + 0.6 * _norm(body) + echo, 0.8)
+
+
+def alarm(rng, dur=1.6):
+    t = _t(dur)
+    f = np.where((t * 4).astype(int) % 2 == 0, 880.0, 660.0)
+    tone = np.sign(np.sin(2 * np.pi * np.cumsum(f) / SR)) * 0.5 + np.sin(2 * np.pi * np.cumsum(f) / SR) * 0.5
+    tone = _band(tone, 300, 4000)
+    return _norm(tone * np.minimum(1, (dur - t) / 0.1), 0.45)
+
+
+def coin(rng):
+    t = _t(0.7)
+    out = np.zeros(len(t))
+    for f0, delay in ((1318.5, 0.0), (1975.5, 0.08)):
+        i = int(delay * SR)
+        tt = t[: len(t) - i]
+        out[i:] += (np.sin(2 * np.pi * f0 * tt) + 0.4 * np.sin(2 * np.pi * f0 * 2.01 * tt)) * np.exp(-tt * 7)
+    return _norm(out, 0.4)
+
+
+def rip(rng):
+    t = _t(0.55)
+    noise = _band(rng.standard_normal(len(t)), 700, 6000)
+    grains = (rng.random(len(t) // 200 + 1) > 0.35).repeat(200)[: len(t)]
+    env = np.minimum(t / 0.02, 1) * np.exp(-t * 4)
+    return _norm(noise * (0.4 + grains) * env + 0.6 * whoosh(rng, 0.55, 300, 2000, 0.3), 0.75)
+
+
+def squish(rng):
+    t = _t(0.5)
+    body = _glide(260, 60, 0.5, 5) * np.exp(-t * 9)
+    wet = _band(rng.standard_normal(len(t)), 150, 1200) * np.exp(-t * 14)
+    return _norm(body + _norm(wet, 0.7) + 0.6 * np.pad(thud(rng), (0, len(t)))[: len(t)], 0.85)
+
+
+def typewriter(rng):
+    t = _t(0.05)
+    return _norm(_band(rng.standard_normal(len(t)), 1500, 7000) * np.exp(-t * 300)
+                 + 0.4 * np.sin(2 * np.pi * 180 * t) * np.exp(-t * 120), 0.22)
+
+
+def drone(rng, dur):
+    """Low battlefield rumble bed."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    rumble = _band(rng.standard_normal(n), 25, 140)
+    wind = _band(rng.standard_normal(n), 300, 1400) * (0.5 + 0.5 * np.sin(2 * np.pi * 0.07 * t + 1))
+    tone = sum(np.sin(2 * np.pi * f * t + p) for f, p in ((55, 0), (55.4, 1), (82.4, 2))) / 3
+    env = np.minimum(1, np.minimum(t / 2.0, (dur - t) / 2.0))
+    return _norm(_norm(rumble) + 0.25 * _norm(wind) + 0.35 * tone, 0.5) * env
+
+
+def snare(rng, power=1.0):
+    t = _t(0.25)
+    rattle = _band(rng.standard_normal(len(t)), 1500, 9000) * np.exp(-t * 22)
+    skin = np.sin(2 * np.pi * 190 * t) * np.exp(-t * 35)
+    return _norm(rattle + 0.7 * skin, 0.5 * power)
+
+
+def fanfare(rng):
+    notes = [(523.3, 0.0), (659.3, 0.12), (784.0, 0.24), (1046.5, 0.36)]
+    out = np.zeros(int(1.6 * SR))
+    for f0, d0 in notes:
+        i = int(d0 * SR)
+        tt = np.arange(len(out) - i) / SR
+        out[i:] += (np.sin(2 * np.pi * f0 * tt) + 0.5 * np.sin(2 * np.pi * f0 * 2 * tt)
+                    + 0.25 * np.sin(2 * np.pi * f0 * 3 * tt)) * np.minimum(tt / 0.01, 1) * np.exp(-tt * (3 if f0 > 1000 else 6))
+    return _norm(out, 0.5)
+
+
 SOUNDS = {
     "whoosh": lambda rng, **k: whoosh(rng, k.get("dur", 0.3)),
     "swish": lambda rng, **k: whoosh(rng, 0.18, 900, 4200, 0.5),
@@ -131,6 +224,17 @@ SOUNDS = {
     "step": lambda rng, **k: step(rng),
     "clap": lambda rng, **k: clap(rng),
     "land": lambda rng, **k: land(rng),
+    "boom": lambda rng, **k: boom(rng),
+    "distant_boom": lambda rng, **k: distant_boom(rng),
+    "gunshot": lambda rng, **k: gunshot(rng),
+    "alarm": lambda rng, **k: alarm(rng, k.get("dur", 1.6)),
+    "coin": lambda rng, **k: coin(rng),
+    "rip": lambda rng, **k: rip(rng),
+    "squish": lambda rng, **k: squish(rng),
+    "type": lambda rng, **k: typewriter(rng),
+    "drone": lambda rng, **k: drone(rng, k["dur"]),
+    "snare": lambda rng, **k: snare(rng, k.get("power", 1.0)),
+    "fanfare": lambda rng, **k: fanfare(rng),
 }
 
 
