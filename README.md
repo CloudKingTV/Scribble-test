@@ -1,38 +1,62 @@
-# Scribble stick-figure animation
+# stickanim
 
-A small Python setup for making hand-drawn-style stick-figure videos. There's no GUI: you write the scene as code and it renders an MP4.
+Procedural stick-figure action animation in the style of the classic "stick figure fights the
+mouse cursor on a computer desktop" shorts. You write the choreography as a Python script.
+The engine handles the rest: rig, physics, effects, sound, and an MP4 output.
 
-**Needs:** Python 3, Pillow, NumPy and `ffmpeg` on the PATH.
+**Needs:** Python 3.9+, Pillow, NumPy, and `ffmpeg` on the PATH.
 
 ```bash
-python3 demo.py                # render demo.mp4 (11 s, 1280x720, 24 fps)
-python3 demo.py --still 4.0    # save one frame at t=4.0s as frame.png, for quick checks
+python3 movie.py                       # render stick_vs_cursor.mp4 (~40 s, 1080p30, with sound)
+python3 movie.py --still 19.4          # one frame at t=19.4 s -> still.png
+python3 movie.py --sheet 5,10.8,19.4   # contact sheet of several moments -> sheet.png
 ```
 
-## How it works
+The full render takes about 40 seconds on 4 cores, because frames render in parallel.
 
-1. **Rig:** each `Figure` is a skeleton with ten joint angles (torso lean, head, shoulders, elbows, hips, knees). Forward kinematics turns the angles into bone positions. The lowest foot is placed on the ground automatically, so poses never float or sink into the floor.
-2. **Keyframes:** `fig.key(t, x=..., lift=..., pose={...}, ease="smooth")` sets a keyframe. Values between keyframes are interpolated using `linear`, `smooth`, `in` or `out` easing.
-3. **Scribble look:** every bone is drawn twice as a slightly bowed, jittered stroke. The head is a circle that overshoots where it closes. The jitter seed changes 8 times a second, which makes the lines "boil" like hand-drawn animation. The paper background has grain and a vignette.
-4. **Output:** frames are drawn at 2× resolution, downsampled for antialiasing, and piped into `ffmpeg`, which encodes H.264 MP4.
+## What's in the box
+
+| Module | What it does |
+|---|---|
+| `rig.py` | 11-joint skeleton, forward kinematics, two-bone IK, and pose ↔ joint-position conversion |
+| `actors.py` | `Figure` and `Cursor` timelines: keyframes with easing (incl. overshoot/snap), walk/run cycles with planted feet, ballistic leaps and flips, ragdoll segments, IK reaches, pencil "draw-on", spring follow-through, idle breathing |
+| `physics.py` | Verlet ragdoll with joint limits, wall/floor collisions, and pins (so the cursor can grab the head and fling the figure) |
+| `scene.py` | Effects (impact bursts, dust, smear frames, speed lines, screen shake, flash, punch-in zoom, hit-stop freeze frames), baking, and parallel rendering into ffmpeg |
+| `desktop.py` | The stage: wallpaper, icons, taskbar, a drawing-app window that opens/closes, tool palette, and cursor icons (arrow, open hand, grab, pencil, eraser) |
+| `audio.py` | Synthesised SFX (whooshes, punches, thuds, clicks, pencil scratch, footsteps…) mixed in stereo with room reverb |
+| `poses.py` | A pose library: READY, PUNCH, FLY_KICK, UPPERCUT, HERO_LAND, TUCK, … |
 
 ## Writing a scene
 
+Authoring is sequential. Each action returns the time it ends, so you can chain them. Physics runs
+while you write the script, so you can ask where a body part will be and aim the next beat there.
+
 ```python
-from stickanim import Figure, Scene, STAND
+from stickanim import Desktop, Scene, poses as P
 
-scene = Scene(duration=6)
-bob = scene.add(Figure(x=-80, color=(40, 70, 160)))
+D = Desktop()
+sc = Scene(duration=8, backdrop=D)
+D.open_window(0.0)
+floor = D.CANVAS[3]
 
-bob.walk(0, 2.5, 600)          # walk on-screen
-bob.wave(2.5, 3.5)             # wave
-scene.say(bob, "Hello!", 2.5, 3.8)
-bob.jump(4.0)                  # squat → leap → land (1.2 s)
-bob.key(5.5, pose={**STAND, "lean": 30, "head": 20})   # custom pose: take a bow
+hero = sc.figure(700, floor)
+cur = sc.cursor(1300, 400)
 
-scene.render("bob.mp4")
+t = hero.walk(1000, t0=0.5, run=True)                 # planted-foot run
+t = hero.leap(0.6, 1150, floor, height=150, t0=t, spin=360,
+              poses_=[(0.3, P.TUCK), (0.7, P.TUCK)])  # front flip
+hero.key(t + 0.3, pose=P.READY)
+
+t_hit = t + 0.8
+hero.key(t_hit, pose=P.PUNCH, ease="snap")
+fist = hero.point(t_hit, "r_hand")                    # where will the fist be?
+cur.move(t_hit, *fist, t0=t)                          # ...put the cursor there
+sc.hit(t_hit, *fist, power=0.8)                       # sound + burst + shake + freeze frame
+cur.move(t_hit + 0.4, 1500, 200, rot=400, ease="out") # knocked spinning
+
+sc.render("short.mp4")
 ```
 
-Angles are in degrees. 0 means "hanging straight down" and positive values move toward the direction the figure faces. Each joint is relative to its parent. For example, `l_knee: -60` bends the left knee back by 60°.
-
-Main settings: `Figure(size=, color=, width=, facing=)`, `Scene(width=, height=, fps=, boil_fps=, ground_y=)`, and `Pen(wobble=)` for how shaky the lines are.
+Angles are in degrees in the figure's own frame: 0 = hanging down, +90 = pointing forward,
+180 = up. Each joint is relative to its parent. `spin` rotates the whole body (+ = front flip).
+See `rig.py` for the details.

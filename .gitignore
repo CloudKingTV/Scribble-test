@@ -1,3 +1,5 @@
 __pycache__/
 *.mp4
-frame.png
+*.wav
+still.png
+sheet.png
