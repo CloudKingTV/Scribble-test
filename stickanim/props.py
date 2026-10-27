@@ -219,6 +219,183 @@ WORLD = dict(coin=coin, rug=rug, bread=bread, candle=candle, megaphone=megaphone
              laser=laser, label=label, sign=sign)
 
 
+def _usd(v):
+    v = float(v)
+    if v >= 1e6:
+        return f"${v / 1e6:.1f}M"
+    if v >= 1e3:
+        return f"${v / 1e3:.0f}K"
+    return f"${v:.0f}"
+
+
+def _qr(d, x0, y0, size, seed, col):
+    """A QR-looking block (random modules plus the three finder squares)."""
+    import random as _r
+    rng = _r.Random(seed)
+    n = 21
+    m = size / n
+    for i in range(n):
+        for j in range(n):
+            finder = any(fi <= i < fi + 7 and fj <= j < fj + 7 for fi, fj in ((0, 0), (0, 14), (14, 0)))
+            if finder:
+                fi, fj = (0 if i < 7 else 14), (0 if j < 7 else 14)
+                ii, jj = i - fi, j - fj
+                on = ii in (0, 6) or jj in (0, 6) or (2 <= ii <= 4 and 2 <= jj <= 4)
+            else:
+                on = rng.random() < 0.5
+            if on:
+                d.rectangle([x0 + j * m, y0 + i * m, x0 + (j + 1) * m, y0 + (i + 1) * m], fill=col)
+
+
+def window(d, L, ss, ox):
+    """An app window (centre x, y). content: chart | post | profile | blank."""
+    a, s = L["alpha"], L["scale"]
+    if a <= 0.01 or s <= 0.02:
+        return
+    w, h = L.get("w", 640), L.get("h", 420)
+    k = ss * s
+    cx, cy = (L["x"] - ox) * ss, L["y"] * ss
+    X = lambda u: cx + u * k
+    Y = lambda v: cy + v * k
+    x0, y0, x1, y1 = -w / 2, -h / 2, w / 2, h / 2
+    d.rounded_rectangle([X(x0 + 8), Y(y0 + 14), X(x1 + 8), Y(y1 + 16)], 12 * k, fill=_a((0, 0, 0), 0.28 * a))
+    d.rounded_rectangle([X(x0), Y(y0), X(x1), Y(y1)], 10 * k, fill=_a((243, 243, 247), a),
+                        outline=_a((140, 142, 156), a), width=max(1, round(k)))
+    d.text((X(x0 + 18), Y(y0 + 20)), L.get("title", ""), font=font(16 * k), fill=_a((40, 42, 52), a), anchor="lm")
+    bx = x1 - 28
+    if L.get("x_hover"):
+        d.rectangle([X(x1 - 52), Y(y0 + 1), X(x1 - 1), Y(y0 + 39)], fill=_a((225, 30, 45), a))
+    xc = (255, 255, 255) if L.get("x_hover") else (60, 62, 72)
+    d.line([X(bx - 6), Y(y0 + 14), X(bx + 6), Y(y0 + 26)], fill=_a(xc, a), width=max(1, round(2 * k)))
+    d.line([X(bx - 6), Y(y0 + 26), X(bx + 6), Y(y0 + 14)], fill=_a(xc, a), width=max(1, round(2 * k)))
+    c0, c1, c2, c3 = x0 + 10, y0 + 40, x1 - 10, y1 - 10
+    content = L.get("content", "blank")
+    if content == "chart":
+        d.rectangle([X(c0), Y(c1), X(c2), Y(c3)], fill=_a((16, 18, 26), a))
+        for gy in range(1, 5):
+            yy = c1 + (c3 - c1) * gy / 5
+            d.line([X(c0), Y(yy), X(c2), Y(yy)], fill=_a((40, 44, 58), a), width=max(1, round(k)))
+        series = L.get("series", [])
+        prog = L.get("progress", len(series))
+        n = max(1, len(series))
+        cw = (c2 - c0 - 20) / n
+        val = lambda v: c3 - 14 - v * (c3 - c1 - 90)
+        for i, (o, c) in enumerate(series):
+            if i >= prog:
+                break
+            if i + 1 > prog:
+                c = o + (c - o) * (prog - i)
+            col = (60, 220, 140) if c >= o else (240, 70, 80)
+            xm = c0 + 10 + cw * (i + 0.5)
+            hi, lo = max(o, c), min(o, c)
+            d.line([X(xm), Y(val(hi) - 8), X(xm), Y(val(lo) + 8)], fill=_a(col, a), width=max(1, round(2 * k)))
+            d.rectangle([X(xm - cw * 0.32), Y(val(hi)), X(xm + cw * 0.32), Y(max(val(lo), val(hi) + 2))],
+                        fill=_a(col, a))
+        d.text((X(c0 + 16), Y(c1 + 26)), L.get("ticker", ""), font=mono(20 * k), fill=_a((246, 196, 60), a), anchor="lm")
+        if "mc" in L:
+            d.text((X(c0 + 16), Y(c1 + 62)), "MC " + _usd(L["mc"]), font=mono(34 * k),
+                   fill=_a(L.get("mc_color", (80, 240, 150)), a), anchor="lm")
+    elif content in ("post", "profile"):
+        d.rectangle([X(c0), Y(c1), X(c2), Y(c3)], fill=_a((255, 255, 255), a))
+        top = c1 + 12
+        if content == "post" and L.get("reposted_by"):
+            d.text((X(c0 + 70), Y(top + 8)), "\u21bb " + L["reposted_by"] + " reposted", font=font(15 * k, bold=True),
+                   fill=_a((40, 160, 90), a), anchor="lm")
+            top += 26
+        av = L.get("avatar", (230, 70, 50))
+        d.ellipse([X(c0 + 16), Y(top), X(c0 + 64), Y(top + 48)], fill=_a(av, a))
+        d.text((X(c0 + 76), Y(top + 14)), L.get("name", "Kimchi"), font=font(20 * k, bold=True),
+               fill=_a((20, 20, 26), a), anchor="lm")
+        d.text((X(c0 + 76), Y(top + 36)), L.get("handle", "@kimchi1x"), font=font(15 * k),
+               fill=_a((110, 112, 125), a), anchor="lm")
+        ty = top + 70
+        for line in L.get("text", "").split("\n"):
+            d.text((X(c0 + 20), Y(ty)), line, font=font(19 * k), fill=_a((25, 25, 30), a), anchor="lm")
+            ty += 27
+        if content == "profile":
+            d.text((X(c0 + 20), Y(ty + 6)), L.get("bio", ""), font=mono(19 * k), fill=_a((40, 40, 50), a), anchor="lm")
+            if "followers" in L:
+                d.text((X(c0 + 20), Y(ty + 40)), f"{L['followers'] / 1000:.0f}K followers", font=font(16 * k, bold=True),
+                       fill=_a((90, 92, 105), a), anchor="lm")
+        if L.get("qr"):
+            iy0, iy1 = ty + 6, c3 - 46
+            d.rounded_rectangle([X(c0 + 20), Y(iy0), X(c2 - 20), Y(iy1)], 10 * k, fill=_a((40, 22, 56), a))
+            q = min(iy1 - iy0 - 30, 170)
+            _qr(d, X(c0 + 40), Y(iy0 + 15), q * k, 7, _a((255, 255, 255), a))
+            d.text((X((c0 + 60 + q + c2) / 2), Y((iy0 + iy1) / 2 - 14)), "PROJECT", font=font(30 * k, bold=True),
+                   fill=_a((255, 90, 70), a), anchor="mm")
+            d.text((X((c0 + 60 + q + c2) / 2), Y((iy0 + iy1) / 2 + 22)), "KIMCHI", font=font(30 * k, bold=True),
+                   fill=_a((255, 90, 70), a), anchor="mm")
+        if content == "post":
+            col = (40, 170, 90) if L.get("reposted_by") else (110, 112, 125)
+            d.text((X(c0 + 20), Y(c3 - 22)), f"\u21bb {L.get('reposts', 0):.0f}", font=font(17 * k, bold=True),
+                   fill=_a(col, a), anchor="lm")
+            d.text((X(c0 + 130), Y(c3 - 22)), f"\u2665 {L.get('likes', 0):.0f}", font=font(17 * k, bold=True),
+                   fill=_a((110, 112, 125), a), anchor="lm")
+        if L.get("deleted"):
+            d.rectangle([X(c0), Y(c1), X(c2), Y(c3)], fill=_a((236, 236, 240), a))
+            d.text((X((c0 + c2) / 2), Y((c1 + c3) / 2)), "This post has been deleted.", font=font(22 * k, bold=True),
+                   fill=_a((120, 122, 135), a), anchor="mm")
+    else:
+        d.rectangle([X(c0), Y(c1), X(c2), Y(c3)], fill=_a((255, 255, 255), a))
+        lines = L.get("text", "").split("\n")
+        for i, line in enumerate(lines):
+            d.text((X((c0 + c2) / 2), Y((c1 + c3) / 2 + (i - (len(lines) - 1) / 2) * 40 * 1.0)), line,
+                   font=font(L.get("size", 30) * k, bold=True), fill=_a(L.get("color", (25, 25, 30)), a), anchor="mm")
+
+
+def car(d, L, ss, ox):
+    """A low red supercar, side view (x, y = middle of the ground line)."""
+    a = L["alpha"]
+    f = _xf(L, ss, ox)
+    face = L.get("facing", 1)
+    q = lambda pts: [f(px * face, py) for px, py in pts]
+    body = [(-190, -20), (-185, -55), (-120, -70), (-60, -112), (50, -114), (120, -78), (185, -66), (195, -30), (190, -20)]
+    d.polygon(q(body), fill=_a(L.get("color", (220, 30, 40)), a), outline=_a(INK, a), width=round(3 * ss))
+    d.polygon(q([(-50, -102), (40, -104), (95, -76), (-95, -74)]), fill=_a((150, 200, 230), a), outline=_a(INK, a),
+              width=round(2 * ss))
+    d.line(q([(-10, -104), (-14, -74)]), fill=_a(INK, a), width=round(3 * ss))
+    for wx in (-115, 120):
+        d.polygon(_ellipse(lambda u, v: f(u * face, v), wx, -20, 34, 34), fill=_a((22, 22, 26), a))
+        d.polygon(_ellipse(lambda u, v: f(u * face, v), wx, -20, 16, 16), fill=_a((190, 190, 200), a))
+    d.line(q([(150, -60), (185, -58)]), fill=_a((255, 240, 160), a), width=round(5 * ss))
+
+
+def magnifier(d, L, ss, ox):
+    """An on-chain sleuth's magnifying glass."""
+    a = L["alpha"]
+    f = _xf(L, ss, ox)
+    d.line([f(42, 42), f(105, 105)], fill=_a((80, 50, 30), a), width=round(14 * ss * L["scale"]))
+    d.polygon(_ellipse(f, 0, 0, 60, 60), fill=_a((190, 230, 255), 0.35 * a), outline=_a(INK, a), width=round(6 * ss))
+    d.arc([*f(-40, -40), *f(40, 40)], 200, 250, fill=_a((255, 255, 255), 0.8 * a), width=round(5 * ss))
+    if L.get("text"):
+        x, y = f(0, 0)
+        _text(d, (x, y), L["text"], 20 * L["scale"], _a(L.get("color", INK), a), ss)
+
+
+def stamp(d, L, ss, ox):
+    """A rubber stamp, e.g. UNVERIFIED."""
+    a = L["alpha"]
+    f = _xf(L, ss, ox)
+    col = L.get("color", (220, 40, 50))
+    size = L.get("size", 44)
+    fnt = font(size * ss * L["scale"], bold=True)
+    w = d.textlength(L["text"], font=fnt) / (ss * L["scale"]) / 2 + 22
+    hgt = size * 0.75
+    d.polygon([f(-w, -hgt), f(w, -hgt), f(w, hgt), f(-w, hgt)], outline=_a(col, a), width=round(6 * ss * L["scale"]))
+    x, y = f(0, 0)
+    c, s_ = math.cos(math.radians(L["rot"])), math.sin(math.radians(L["rot"]))
+    from PIL import Image as _I, ImageDraw as _D
+    tw, th = int(2 * w * ss * L["scale"]), int(2 * hgt * ss * L["scale"])
+    im = _I.new("L", (tw, th), 0)
+    _D.Draw(im).text((tw / 2, th / 2), L["text"], font=fnt, fill=int(255 * a), anchor="mm")
+    im = im.rotate(-L["rot"], expand=True, resample=_I.BICUBIC)
+    d._image.paste(_I.new("RGB", im.size, col), (int(x - im.width / 2), int(y - im.height / 2)), im)
+
+
+WORLD.update(window=window, car=car, magnifier=magnifier, stamp=stamp)
+
+
 # ---------------------------------------------------------------------- HUD (screen space)
 
 def wallet(d, L, W, H):

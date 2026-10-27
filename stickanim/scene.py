@@ -306,6 +306,15 @@ def _draw_body(d, P, fig, ss, facing=1):
             er = r * 0.13 * ss
             d.ellipse([ex - er * 2, ey - er * 2, ex + er * 2, ey + er * 2], fill=(255, 40, 60, 70))
             d.ellipse([ex - er, ey - er, ex + er, ey + er], fill=(255, 60, 70))
+    elif fig["hat"] == "cap":                       # baseball cap worn backwards
+        cx, cy = hx + up[0] * r * 0.12, hy + up[1] * r * 0.12
+        dome = [((cx + (up[0] * math.cos(a) + side[0] * math.sin(a)) * r * 1.06) * ss,
+                 (cy + (up[1] * math.cos(a) + side[1] * math.sin(a)) * r * 1.06) * ss)
+                for a in (math.radians(d_) for d_ in range(-95, 96, 8))]
+        d.polygon(dome, fill=(28, 28, 34), outline=(10, 10, 12), width=round(2 * ss))
+        b0 = ((cx - fwd[0] * r * 0.2) * ss, (cy - fwd[1] * r * 0.2) * ss)
+        b1 = ((cx - fwd[0] * r * 1.75 + up[0] * r * 0.05) * ss, (cy - fwd[1] * r * 1.75 + up[1] * r * 0.05) * ss)
+        d.line([b0, b1], fill=(28, 28, 34), width=round(r * 0.3 * ss))
     elif fig["hat"] == "helmet":
         cx, cy = hx + up[0] * r * 0.18, hy + up[1] * r * 0.18
         dome = [((cx + (up[0] * math.cos(a) + side[0] * math.sin(a)) * r * 1.12) * ss,

@@ -7,6 +7,7 @@ The engine handles the rest: rig, physics, effects, sound, and an MP4 output.
 **Needs:** Python 3.9+, Pillow, NumPy, and `ffmpeg` on the PATH.
 
 ```bash
+python3 kimchi.py                      # render the_kimchi_story.mp4 (~75 s): THE KIMCHI STORY
 python3 trenches.py                    # render the_trenches.mp4 (~55 s): THE TRENCHES, a memecoin war story
 python3 movie.py                       # render stick_vs_cursor.mp4 (~40 s, 1080p30, with sound)
 python3 movie.py --still 19.4          # one frame at t=19.4 s -> still.png
@@ -14,6 +15,16 @@ python3 movie.py --sheet 5,10.8,19.4   # contact sheet of several moments -> she
 ```
 
 The full render takes about 40 seconds on 4 cores, because frames render in parallel.
+
+## THE KIMCHI STORY
+
+`kimchi.py` retells, in the desktop style, the October 2026 saga of the pseudonymous Solana trader
+Kimchi. It covers the unverified ~$40M TRUMP claim, Pump.fun signing him as a creative partner,
+$KIMCHI hitting ~$40M, the QR-code "Project Kimchi" post that a Pump.fun co-founder reposted, the
+~98% crash after the post and repost vanished, the unconfirmed hack claim, Lookonchain's $385K+
+early-wallet finding, and the bio scrub and boycott calls. Claims and allegations appear as
+unverified or unconfirmed, as the sources report them. Sources are listed on the end card and in
+the script.
 
 ## THE TRENCHES
 
