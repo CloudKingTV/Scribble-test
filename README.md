@@ -54,7 +54,7 @@ All tickers are made up. It's a parody, not financial advice.
 | `physics.py` | Verlet ragdoll with joint limits, wall/floor collisions, and pins (so the cursor can grab the head and fling the figure) |
 | `scene.py` | Effects (impact bursts, dust, smear frames, speed lines, screen shake, flash, punch-in zoom, hit-stop freeze frames), baking, and parallel rendering into ffmpeg |
 | `battlefield.py` | Side-scrolling trench stage: parallax sky with a candlestick-chart skyline, sandbags, revetments, barbed wire, duckboards, artillery flashes, drifting ash |
-| `props.py` | Keyframed props: coins, rugs, bread slices, candles, megaphones, speech bubbles, laser sights, floating labels, signs; HUD wallet, banners, typewriter captions, progress bar |
+| `props.py` | Keyframed props: app windows (live chart, social post with QR code, profile bio), supercar, magnifier, rubber stamps, coins, rugs, bread slices, candles, megaphones, speech bubbles, laser sights, floating labels, signs; HUD wallet, banners, typewriter captions, progress bar |
 | `desktop.py` | The stage: wallpaper, icons, taskbar, a drawing-app window that opens/closes, tool palette, and cursor icons (arrow, open hand, grab, pencil, eraser) |
 | `audio.py` | Synthesised SFX (whooshes, punches, thuds, clicks, pencil scratch, footsteps…) mixed in stereo with room reverb |
 | `poses.py` | A pose library: READY, PUNCH, FLY_KICK, UPPERCUT, HERO_LAND, TUCK, … |
